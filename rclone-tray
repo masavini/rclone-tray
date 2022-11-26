@@ -149,7 +149,6 @@ function main() {
         || exit 1
 
 
-    export SCRIPT_PATH="${BASH_SOURCE[0]}"
     export ICONS_DIR="$(dirname "$(realpath "${BASH_SOURCE[0]}")")/icons"
     export CONFIG_DIR=~/.config/rclone-tray
     mkdir -p "${CONFIG_DIR}"
