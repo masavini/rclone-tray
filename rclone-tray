@@ -22,6 +22,7 @@ function __run_rclone() {
     exec 3<> "${YAD_PIPE}"
     exec 4<> "${LOG_PIPE}"
 
+
     echo "icon:${ICONS_DIR}/rclone-sync.svg" >&3
     echo "menu:${RUNNING_MENU}|${VIEW_LOG_MENU}|${SETTINGS_MENU}|${QUIT_MENU}" >&3
 
@@ -33,7 +34,7 @@ function __run_rclone() {
     local rclone_cmd=(
         'rclone' 'bisync'
             # gdrive: /data/gdrive
-            "${DIR1}" "${DIR2}"
+            "${PATH1}" "${PATH2}"
             --drive-skip-gdocs
             -v
     )
@@ -51,10 +52,31 @@ function __run_rclone() {
         sleep 60
     done
 
-    if "${rclone_cmd[@]}" 2>&1 | tee -a "${LOG}" >&4; then
-        local icon='success'
-    else
+    notify-send \
+        --icon "${ICONS_DIR}/rclone-sync.svg" \
+        --app-name 'rclone' \
+        "${run_type} bisync run started..." \
+        "Path 1: ${PATH1}\nPath 2: ${PATH2}"
+
+    local rclone_out="$("${rclone_cmd[@]}" 2>&1)"
+    local rclone_ret=$?
+    echo "${rclone_out}" | tee -a "${LOG}" >&4
+    if ((rclone_ret)) ; then
         local icon='error'
+
+        notify-send \
+            --icon "${ICONS_DIR}/rclone-${icon}.svg" \
+            --app-name 'rclone' \
+            "${run_type} bisync failed." \
+            "Path 1: ${PATH1}\nPath 2: ${PATH2}"
+    else
+        local icon='success'
+
+        notify-send \
+            --icon "${ICONS_DIR}/rclone-${icon}.svg" \
+            --app-name 'rclone' \
+            "${run_type} bisync run completed." \
+            "Path 1: ${PATH1}\nPath 2: ${PATH2}"
     fi
 
     echo "##################################" | tee -a "${LOG}" >&4
@@ -94,8 +116,8 @@ function __edit_settings() {
         yad --form \
             --title "rclone-tray settings" \
             --window-icon "${ICONS_DIR}/rclone.svg" \
-            --field 'Directory 1:' "${DIR1}" \
-            --field 'Directory 2:' "${DIR2}" \
+            --field 'Path 1:' "${PATH1}" \
+            --field 'Path 2:' "${PATH2}" \
             --field 'Interval between scheduled runs (in minutes)::NUM' "${sleep_minutes:-10}!1..1000000" \
             --field 'Dry run:CHK' "${DRY_RUN:-TRUE}" \
             --field 'Verbose log:CHK' "${VERBOSE:-FALSE}"
@@ -103,10 +125,10 @@ function __edit_settings() {
 
     [[ -z "${form}" ]] && return 0
 
-    IFS='|' read -r DIR1 DIR2 sleep_minutes DRY_RUN VERBOSE <<< "${form}"
+    IFS='|' read -r PATH1 PATH2 sleep_minutes DRY_RUN VERBOSE <<< "${form}"
 
-    echo "local DIR1='${DIR1}'" > "${CONFIG_FILE}"
-    echo "local DIR2='${DIR2}'" >> "${CONFIG_FILE}"
+    echo "local PATH1='${PATH1}'" > "${CONFIG_FILE}"
+    echo "local PATH2='${PATH2}'" >> "${CONFIG_FILE}"
     echo "local SLEEP_INTERVAL=$((sleep_minutes*60))" >> "${CONFIG_FILE}"
     echo "local DRY_RUN=${DRY_RUN}" >> "${CONFIG_FILE}"
     echo "local VERBOSE=${VERBOSE}" >> "${CONFIG_FILE}"
@@ -123,7 +145,7 @@ export -f __edit_settings
 
 function main() {
 
-    which 'mktemp' 'yad' > /dev/null \
+    which 'mktemp' 'yad' 'notify-send' > /dev/null \
         || exit 1
 
 
