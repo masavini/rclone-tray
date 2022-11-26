@@ -5,6 +5,16 @@
 # https://www.mankier.com/1/yad#Options-Form_options
 
 
+function __is_wan_up () {
+    ! ping -c 1 8.8.8.8 &> /dev/null \
+        && ! ping -c 1 4.2.2.2 &> /dev/null \
+        && return 1
+
+    return 0
+}
+export -f __is_wan_up
+
+
 function __run_rclone() {
 
     local run_type="${1^}"
@@ -34,6 +44,12 @@ function __run_rclone() {
 
     echo "# rclone_cmd: ${rclone_cmd[*]}" | tee -a "${LOG}" >&4
     echo "##################################" | tee -a "${LOG}" >&4
+
+    # wait for connectivity
+    while ! __is_wan_up; do
+        echo "wan is down: retrying in 1 minute..." | tee -a "${LOG}" >&4
+        sleep 60
+    done
 
     if "${rclone_cmd[@]}" 2>&1 | tee -a "${LOG}" >&4; then
         local icon='success'
