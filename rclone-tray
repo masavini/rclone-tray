@@ -200,7 +200,7 @@ function main() {
         __run_rclone 'scheduled'
 
         source "${CONFIG_FILE}" # needed for $SLEEP_INTERVAL
-        echo "sleeping ${SLEEP_INTERVAL}" | tee -a "${LOG}" >&4
+        echo "sleeping ${SLEEP_INTERVAL} seconds" | tee -a "${LOG}" >&4
         sleep "${SLEEP_INTERVAL}"
 
     done
