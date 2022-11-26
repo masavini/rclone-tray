@@ -1,0 +1,5 @@
+local DIR1='gdrive:'
+local DIR2='/data/gdrive'
+local SLEEP_INTERVAL=3600
+local DRY_RUN=FALSE
+local VERBOSE=FALSE

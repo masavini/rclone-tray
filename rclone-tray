@@ -1,0 +1,172 @@
+#! /usr/bin/env bash
+
+# https://github.com/v1cont/yad
+# https://sourceforge.net/p/yad-dialog/wiki/NotificationIcon/
+# https://www.mankier.com/1/yad#Options-Form_options
+
+
+function __run_rclone() {
+
+    local run_type="${1^}"
+
+    exec 3<> "${YAD_PIPE}"
+    exec 4<> "${LOG_PIPE}"
+
+    echo "icon:${ICONS_DIR}/rclone-sync.svg" >&3
+    echo "menu:${RUNNING_MENU}|${VIEW_LOG_MENU}|${SETTINGS_MENU}|${QUIT_MENU}" >&3
+
+    echo -e "\n##################################" | tee -a "${LOG}" >&4
+    echo "# ${run_type} run - $(date)" | tee -a "${LOG}" >&4
+
+    source "${CONFIG_FILE}"
+
+    local rclone_cmd=(
+        'rclone' 'bisync'
+            # gdrive: /data/gdrive
+            "${DIR1}" "${DIR2}"
+            --drive-skip-gdocs
+            -v
+    )
+    [[ "${VERBOSE}" == 'TRUE' ]] \
+        && rclone_cmd+=('-v')
+    [[ "${DRY_RUN}" == 'TRUE' ]] \
+        && rclone_cmd+=('--dry-run')
+
+    echo "# rclone_cmd: ${rclone_cmd[*]}" | tee -a "${LOG}" >&4
+    echo "##################################" | tee -a "${LOG}" >&4
+
+    if "${rclone_cmd[@]}" 2>&1 | tee -a "${LOG}" >&4; then
+        local icon='success'
+    else
+        local icon='error'
+    fi
+
+    echo "##################################" | tee -a "${LOG}" >&4
+
+    echo "icon:${ICONS_DIR}/rclone-${icon}.svg" >&3
+    echo "menu:${SYNC_MENU}|${VIEW_LOG_MENU}|${SETTINGS_MENU}|${QUIT_MENU}" >&3
+}
+export -f __run_rclone
+
+
+function __view_log() {
+
+    exec 4<> "${LOG_PIPE}"
+
+    yad --text-info \
+        --title "${LOG}" \
+        --geometry 800x800 \
+        --window-icon "${ICONS_DIR}/rclone.svg" \
+        --tail \
+        --listen <&4 &
+}
+export -f __view_log
+
+
+function __edit_settings() {
+
+    exec 4<> "${LOG_PIPE}"
+
+    [[ -s "${CONFIG_FILE}" ]] \
+        && source "${CONFIG_FILE}"
+
+    [[ -v SLEEP_INTERVAL ]] \
+        && local sleep_minutes=$((SLEEP_INTERVAL/60))
+
+
+    local form=$(
+        yad --form \
+            --title "rclone-tray settings" \
+            --window-icon "${ICONS_DIR}/rclone.svg" \
+            --field 'Directory 1:' "${DIR1}" \
+            --field 'Directory 2:' "${DIR2}" \
+            --field 'Interval between scheduled runs (in minutes)::NUM' "${sleep_minutes:-10}!1..1000000" \
+            --field 'Dry run:CHK' "${DRY_RUN:-TRUE}" \
+            --field 'Verbose log:CHK' "${VERBOSE:-FALSE}"
+    )
+
+    [[ -z "${form}" ]] && return 0
+
+    IFS='|' read -r DIR1 DIR2 sleep_minutes DRY_RUN VERBOSE <<< "${form}"
+
+    echo "local DIR1='${DIR1}'" > "${CONFIG_FILE}"
+    echo "local DIR2='${DIR2}'" >> "${CONFIG_FILE}"
+    echo "local SLEEP_INTERVAL=$((sleep_minutes*60))" >> "${CONFIG_FILE}"
+    echo "local DRY_RUN=${DRY_RUN}" >> "${CONFIG_FILE}"
+    echo "local VERBOSE=${VERBOSE}" >> "${CONFIG_FILE}"
+
+
+    echo -e "\n##################################" | tee -a "${LOG}" >&4
+    echo "# new configuration saved - $(date)" | tee -a "${LOG}" >&4
+    echo "##################################" | tee -a "${LOG}" >&4
+    cat "${CONFIG_FILE}" | tee -a "${LOG}" >&4
+    echo "##################################" | tee -a "${LOG}" >&4
+}
+export -f __edit_settings
+
+
+function main() {
+
+    which 'mktemp' 'yad' > /dev/null \
+        || exit 1
+
+
+    export SCRIPT_PATH="${BASH_SOURCE[0]}"
+    export ICONS_DIR="$(dirname "$(realpath "${BASH_SOURCE[0]}")")/icons"
+    export CONFIG_DIR=~/.config/rclone-tray
+    mkdir -p "${CONFIG_DIR}"
+
+    export CONFIG_FILE="${CONFIG_DIR}/config"
+    while [[ ! -s "${CONFIG_FILE}" ]]; do
+        __edit_settings
+    done
+
+    export LOG=$(mktemp -u --tmpdir ${0##*/}-$$-XXX.log)
+
+    # create a FIFO file to control yad
+    export YAD_PIPE=$(mktemp -u --tmpdir ${0##*/}-$$-XXX.fifo)
+    mkfifo "${YAD_PIPE}"
+    exec 3<> "${YAD_PIPE}"
+
+
+    # create a FIFO file to stream the log file
+    export LOG_PIPE=$(mktemp -u --tmpdir ${0##*/}-$$-XXX.logfifo)
+    mkfifo "${LOG_PIPE}"
+    exec 4<> "${LOG_PIPE}"
+
+
+    function __on_exit() {
+        echo "quit" >&3
+        rm -f "${YAD_PIPE}" "${LOG}" "${LOG_PIPE}"
+    }
+    trap __on_exit EXIT
+
+
+    export QUIT_MENU="Quit!kill $$!${ICONS_DIR}/quit.svg"
+    export RUNNING_MENU="Sync in progress!!${ICONS_DIR}/running.svg"
+    export SETTINGS_MENU="Settings!bash -c '__edit_settings'!${ICONS_DIR}/settings.svg"
+    export SYNC_MENU="Sync now!bash -c '__run_rclone manual'!${ICONS_DIR}/sync.svg"
+    export VIEW_LOG_MENU="View log!bash -c '__view_log'!${ICONS_DIR}/log.svg"
+
+    # create the notification icon
+    yad --notification \
+        --no-middle \
+        --listen \
+        --image "${ICONS_DIR}/rclone-success.svg" \
+        --menu "${QUIT_MENU}" \
+        --text "rclone" \
+        --command 'menu' \
+        <&3 &
+
+    while :; do
+
+        __run_rclone 'scheduled'
+
+        source "${CONFIG_FILE}" # needed for $SLEEP_INTERVAL
+        echo "sleeping ${SLEEP_INTERVAL}" | tee -a "${LOG}" >&4
+        sleep "${SLEEP_INTERVAL}"
+
+    done
+}
+
+main "$@"
