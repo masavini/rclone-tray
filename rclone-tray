@@ -189,7 +189,7 @@ function main() {
     yad --notification \
         --no-middle \
         --listen \
-        --image "${ICONS_DIR}/rclone-success.svg" \
+        --image "${ICONS_DIR}/rclone.svg" \
         --menu "${QUIT_MENU}" \
         --text "rclone" \
         --command 'menu' \
