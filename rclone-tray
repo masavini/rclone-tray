@@ -24,7 +24,7 @@ function __run_rclone() {
 
 
     echo "icon:${ICONS_DIR}/rclone-sync.svg" >&3
-    echo "menu:${RUNNING_MENU}|${VIEW_LOG_MENU}|${SETTINGS_MENU}|${QUIT_MENU}" >&3
+    echo "menu:${run_type} ${RUNNING_MENU}|${VIEW_LOG_MENU}|${SETTINGS_MENU}|${QUIT_MENU}" >&3
 
     echo -e "\n##################################" | tee -a "${LOG}" >&4
     echo "# ${run_type} run - $(date)" | tee -a "${LOG}" >&4
@@ -55,11 +55,14 @@ function __run_rclone() {
     notify-send \
         --icon "${ICONS_DIR}/rclone-sync.svg" \
         --app-name 'rclone' \
-        "${run_type} bisync run started..." \
+        "${run_type} sync started..." \
         "Path 1: ${PATH1}\nPath 2: ${PATH2}"
 
+    local start_time="$(date +%s)"
     local rclone_out="$("${rclone_cmd[@]}" 2>&1)"
     local rclone_ret=$?
+    local end_time="$(date +%s)"
+
     echo "${rclone_out}" | tee -a "${LOG}" >&4
     if ((rclone_ret)) ; then
         local icon='error'
@@ -67,15 +70,15 @@ function __run_rclone() {
         notify-send \
             --icon "${ICONS_DIR}/rclone-${icon}.svg" \
             --app-name 'rclone' \
-            "${run_type} bisync failed." \
-            "Path 1: ${PATH1}\nPath 2: ${PATH2}"
+            "${run_type} sync failed." \
+            "Path 1: ${PATH1}\nPath 2: ${PATH2}\n\n${rclone_out}"
     else
         local icon='success'
 
         notify-send \
             --icon "${ICONS_DIR}/rclone-${icon}.svg" \
             --app-name 'rclone' \
-            "${run_type} bisync run completed." \
+            "${run_type} sync completed in $((end_time-start_time)) seconds." \
             "Path 1: ${PATH1}\nPath 2: ${PATH2}"
     fi
 
@@ -118,7 +121,7 @@ function __edit_settings() {
             --window-icon "${ICONS_DIR}/rclone.svg" \
             --field 'Path 1:' "${PATH1}" \
             --field 'Path 2:' "${PATH2}" \
-            --field 'Interval between scheduled runs (in minutes)::NUM' "${sleep_minutes:-10}!1..1000000" \
+            --field 'Minutes between scheduled runs::NUM' "${sleep_minutes:-10}!1..1000000" \
             --field 'Dry run:CHK' "${DRY_RUN:-TRUE}" \
             --field 'Verbose log:CHK' "${VERBOSE:-FALSE}"
     )
@@ -180,7 +183,7 @@ function main() {
 
 
     export QUIT_MENU="Quit!kill $$!${ICONS_DIR}/quit.svg"
-    export RUNNING_MENU="Sync in progress!!${ICONS_DIR}/running.svg"
+    export RUNNING_MENU="sync in progress!!${ICONS_DIR}/running.svg"
     export SETTINGS_MENU="Settings!bash -c '__edit_settings'!${ICONS_DIR}/settings.svg"
     export SYNC_MENU="Sync now!bash -c '__run_rclone manual'!${ICONS_DIR}/sync.svg"
     export VIEW_LOG_MENU="View log!bash -c '__view_log'!${ICONS_DIR}/log.svg"
