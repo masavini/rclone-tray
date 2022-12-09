@@ -43,8 +43,7 @@ function __run_rclone() {
     [[ "${DRY_RUN}" == 'TRUE' ]] \
         && rclone_cmd+=('--dry-run')
 
-    echo "# rclone_cmd: ${rclone_cmd[*]}" | tee -a "${LOG}" >&4
-    echo "##################################" | tee -a "${LOG}" >&4
+    echo "\$ ${rclone_cmd[*]}" | tee -a "${LOG}" >&4
 
     # wait for connectivity
     while ! __is_wan_up; do
@@ -58,29 +57,27 @@ function __run_rclone() {
         "${run_type} sync started..." \
         "Path 1: ${PATH1}\nPath 2: ${PATH2}"
 
+    # run rclone
     local start_time="$(date +%s)"
     local rclone_out="$("${rclone_cmd[@]}" 2>&1)"
     local rclone_ret=$?
     local end_time="$(date +%s)"
-
     echo "${rclone_out}" | tee -a "${LOG}" >&4
-    if ((rclone_ret)) ; then
-        local icon='error'
+    local log_last_line="$(tail -n 1 <<< "${rclone_out}")"
 
-        notify-send \
-            --icon "${ICONS_DIR}/rclone-${icon}.svg" \
-            --app-name 'rclone' \
-            "${run_type} sync failed." \
-            "Path 1: ${PATH1}\nPath 2: ${PATH2}\n\n${rclone_out}"
+    if ((rclone_ret)) || [[ ! "${log_last_line}" =~ ^Elapsed ]] ; then
+        local icon='error'
+        local notification_msg="${log_last_line}"
     else
         local icon='success'
-
-        notify-send \
-            --icon "${ICONS_DIR}/rclone-${icon}.svg" \
-            --app-name 'rclone' \
-            "${run_type} sync completed in $((end_time-start_time)) seconds." \
-            "Path 1: ${PATH1}\nPath 2: ${PATH2}"
+        local notification_msg="${run_type} sync completed in $((end_time-start_time)) seconds."
     fi
+
+    notify-send \
+        --icon "${ICONS_DIR}/rclone-${icon}.svg" \
+        --app-name 'rclone' \
+        "${notification_msg}" \
+        "Path 1: ${PATH1}\nPath 2: ${PATH2}"
 
     echo "##################################" | tee -a "${LOG}" >&4
 
