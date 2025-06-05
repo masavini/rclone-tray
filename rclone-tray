@@ -4,10 +4,12 @@
 # https://sourceforge.net/p/yad-dialog/wiki/NotificationIcon/
 # https://www.mankier.com/1/yad#Options-Form_options
 
+# shellcheck disable=SC1090
+# shellcheck disable=SC2155
 
 function __is_wan_up () {
-    ! ping -c 1 8.8.8.8 &> /dev/null \
-        && ! ping -c 1 4.2.2.2 &> /dev/null \
+    ! ping -c 2 8.8.8.8 &> /dev/null \
+        && ! ping -c 2 4.2.2.2 &> /dev/null \
         && return 1
 
     return 0
@@ -32,11 +34,12 @@ function __run_rclone() {
     source "${CONFIG_FILE}"
 
     local rclone_cmd=(
-        'rclone' 'bisync'
-            # gdrive: /data/gdrive
-            "${PATH1}" "${PATH2}"
-            --drive-skip-gdocs
-            -v
+        'rclone'
+            '--color' NEVER
+            'bisync'
+                "${PATH1}" "${PATH2}" # gdrive: /data/gdrive
+                --drive-skip-gdocs
+                -v
     )
     [[ "${VERBOSE}" == 'TRUE' ]] \
         && rclone_cmd+=('-v')
@@ -149,7 +152,8 @@ function main() {
         || exit 1
 
 
-    export ICONS_DIR="$(dirname "$(realpath "${BASH_SOURCE[0]}")")/icons"
+    export ICONS_DIR
+    ICONS_DIR="$(dirname "$(realpath "${BASH_SOURCE[0]}")")/icons"
     export CONFIG_DIR=~/.config/rclone-tray
     mkdir -p "${CONFIG_DIR}"
 
@@ -158,16 +162,19 @@ function main() {
         __edit_settings
     done
 
-    export LOG=$(mktemp -u --tmpdir ${0##*/}-$$-XXX.log)
+    export LOG
+    LOG=$(mktemp -u --tmpdir "${0##*/}"-$$-XXX.log)
 
     # create a FIFO file to control yad
-    export YAD_PIPE=$(mktemp -u --tmpdir ${0##*/}-$$-XXX.fifo)
+    export YAD_PIPE
+    YAD_PIPE=$(mktemp -u --tmpdir "${0##*/}"-$$-XXX.fifo)
     mkfifo "${YAD_PIPE}"
     exec 3<> "${YAD_PIPE}"
 
 
     # create a FIFO file to stream the log file
-    export LOG_PIPE=$(mktemp -u --tmpdir ${0##*/}-$$-XXX.logfifo)
+    export LOG_PIPE
+    LOG_PIPE=$(mktemp -u --tmpdir "${0##*/}"-$$-XXX.logfifo)
     mkfifo "${LOG_PIPE}"
     exec 4<> "${LOG_PIPE}"
 
@@ -184,9 +191,11 @@ function main() {
     export SETTINGS_MENU="Settings!bash -c '__edit_settings'!${ICONS_DIR}/settings.svg"
     export SYNC_MENU="Sync now!bash -c '__run_rclone manual'!${ICONS_DIR}/sync.svg"
     export VIEW_LOG_MENU="View log!bash -c '__view_log'!${ICONS_DIR}/log.svg"
+    export GDK_BACKEND=x11 # needed by wayland
 
     # create the notification icon
     yad --notification \
+        --item-separator="!" \
         --no-middle \
         --listen \
         --image "${ICONS_DIR}/rclone.svg" \
